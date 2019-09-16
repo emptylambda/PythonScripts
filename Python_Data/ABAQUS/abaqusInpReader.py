@@ -2,6 +2,9 @@ from lark import Lark, UnexpectedInput
 from lark import Transformer
 from abaqus_grammar import abaqus_grammar
 import abaqus_test
+import sys
+import os
+import csv
 
 # TODO Transformer
 ## TODO Node __repr__
@@ -14,7 +17,7 @@ class Coordinate():
         self.coordinate = (x, y, z)
     def __repr__(self):
         (x, y, z) = self.coordinate
-        return "<%f, %f, %f>" % (x, y, z)
+        return "%f, %f, %f" % (x, y, z)
 
 class Node():
     kind = "Node"
@@ -27,8 +30,11 @@ class Node():
 
 class NSet():
     kind = "NSet"
+    nsetname = ""
     def __init__(self):
         self.nset = []
+    def define_nsetname(self, name):
+        self.nsetname = name
     def add_nset(self, i):
         self.nset.append(i)
     def __repr__(self):
@@ -59,14 +65,14 @@ class AbaqusTransformer(Transformer):
 
     def nset(self, args):
         nset = NSet()
-        print args[0]
+        nset.define_nsetname(args[0][1])
         for nums in args[-1]:
             nset.add_nset(nums)
         return nset
 
     def nsetgenerate(self, args):
         nset = NSet()
-        print args[0]
+        nset.define_nsetname(args[0][1])
         start = args[-1][0]
         end   = args[-1][1]
         step  = args[-1][2]
@@ -101,12 +107,17 @@ class AbaqusTransformer(Transformer):
     def element(self, args):
         return
 
+    def cname(self, args):
+        return args
+
 abaquas_parser = Lark(abaqus_grammar, parser='lalr')
 abaquas_read = abaquas_parser.parse
 
 
 def main():
-    file = open("./testModel1_s8r.inp", "r")
+    filepath = sys.argv[1]
+    file = open(filepath, "r")
+    fname = os.path.splitext(file.name)[0]
     input = file.read()
     (beforeEA, EA, _) = input.partition("*End Assembly")
     input = beforeEA + EA
@@ -114,18 +125,27 @@ def main():
     result = abaquas_read(input)
     transResult = AbaqusTransformer().transform(result)
     notNone = list(filter(lambda x: x is not None, transResult))
-    print((notNone))
+    node_content = notNone[0]
+    nsets = notNone[1:-1]
+    print("Size of Node: %s" % str(node_content))
+    print("Number of NSets: %d" % len(nsets))
 
+    os.mkdir(fname)
+    os.chdir(fname)
+    print(os.getcwd())
 
+    nodeFile = open("node.csv", 'w+')
+    for k,v in (node_content.rows.items()):
+        out = str(k) + ", " + str(v) + "\n"
+        nodeFile.write(out)
 
-    # while True:
-    #     try:
-    #         file = open("./nlBuckle_test.inp", "r")
-    #         input = file.read()
-    #         input = input.partition("*End Assembly\n")[0]
-    #     except EOFError:
-    #         break
-    #     print(abaquas_read(input))
+    nodeFile.close()
+    for ns in nsets:
+        print ns.nsetname
+        nsFile = open(ns.nsetname+".csv", 'w+')
+        wr = csv.writer(nsFile, quoting=csv.QUOTE_NONE)
+        wr.writerow(ns.nset)
+        nsFile.close()
 
 def test():
     testString = abaqus_test.testString
